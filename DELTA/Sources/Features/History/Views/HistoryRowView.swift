@@ -75,6 +75,10 @@ public struct HistoryRowView: View {
                     .fill(Color.deltaBgSubtle.opacity(0.55))
             )
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(item.title), \(typeBadgeText), \(item.formattedAmount), \(item.dateString) at \(item.timeString)")
+        .accessibilityHint("Opens complete transaction details and options")
+        .accessibilityAddTraits(.isButton)
         .buttonStyle(TransactionCardPressStyle())
     }
 

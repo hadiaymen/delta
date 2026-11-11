@@ -99,6 +99,18 @@ public final class ExpenseTrackingService: ObservableObject {
         }
     }
 
+    // MARK: - Data Backup & Restore
+    @MainActor
+    public func exportBackup() async throws -> Data {
+        return try await repository.exportBackupData()
+    }
+
+    @MainActor
+    public func restoreFromBackup(data: Data) async throws {
+        try await repository.restoreBackupData(data)
+        await loadData()
+    }
+
     /// Automatically recalculates monthly spent, monthly received, spending comparison, and card balances.
     public func recalculateFinancials() {
         // 1. Calculate Monthly Spent (Sum of Debits in current calendar month)

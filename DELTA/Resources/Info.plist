@@ -21,7 +21,7 @@
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>NSCameraUsageDescription</key>
-    <string>DELTA requires camera access to scan physical expense receipts and barcodes.</string>
+    <string>DELTA requires camera access to scan expense QR codes and physical receipts.</string>
     <key>UILaunchScreen</key>
     <dict>
         <key>UIColorName</key>

@@ -72,7 +72,16 @@ public struct SquircleButton: View {
                 }
             }
         }
+        .accessibilityLabel(accessibilityTitle)
+        .accessibilityAddTraits(.isButton)
         .buttonStyle(SquirclePressStyle())
+    }
+
+    private var accessibilityTitle: String {
+        if let title = title, !title.isEmpty {
+            return title
+        }
+        return iconName.replacingOccurrences(of: ".", with: " ").capitalized
     }
 
     private var backgroundColor: Color {

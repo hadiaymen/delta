@@ -67,6 +67,9 @@ public struct DeltaTabBar: View {
                         .foregroundColor(Color.deltaSurfaceLime)
                 }
             }
+            .accessibilityLabel("Scan QR code")
+            .accessibilityHint("Opens camera scanner to capture expense QR codes and receipts")
+            .accessibilityAddTraits(.isButton)
             .buttonStyle(ScanCenterButtonStyle())
             .offset(y: -22) // Visually raised above the dock
         }
@@ -92,6 +95,9 @@ public struct DeltaTabBar: View {
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
         }
+        .accessibilityLabel(destination.rawValue)
+        .accessibilityHint("Navigates to \(destination.rawValue)")
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         .buttonStyle(TabPressStyle())
     }
 }

@@ -82,6 +82,9 @@ public struct TransactionCard: View {
                     .fill(Color.deltaBgSubtle.opacity(0.55))
             )
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title), \(amountString), \(subtitle), \(timeString)")
+        .accessibilityAddTraits(.isButton)
         .buttonStyle(TransactionCardPressStyle())
     }
 

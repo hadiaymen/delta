@@ -138,6 +138,10 @@ public struct VisualAccountCard: View {
             }
             .padding(22)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(card.accountName), balance \(card.formattedBalance), account ending in \(card.accountIdentifier.suffix(4))")
+        .accessibilityHint(isExpanded ? "Double tap to collapse account card" : "Double tap to expand account card details")
+        .accessibilityAddTraits(.isButton)
         .frame(height: isExpanded ? 260 : 210)
         .animation(DeltaAnimations.tactilePress, value: isExpanded)
     }

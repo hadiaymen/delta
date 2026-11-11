@@ -22,6 +22,7 @@ public struct MetricBadge: View {
             Color(hex: "B7EA16")
         )
         .clipShape(Capsule())
+        .accessibilityLabel("Monthly comparison: \(text)")
     }
 }
 

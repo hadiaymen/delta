@@ -29,6 +29,8 @@ public protocol TransactionRepositoryProtocol {
     func addSplit(_ split: SplitRecord) async throws
     func updateSplit(_ split: SplitRecord) async throws
     func deleteSplit(id: String) async throws
+    func exportBackupData() async throws -> Data
+    func restoreBackupData(_ data: Data) async throws
 }
 
 /// Local file-backed transaction repository with persistence, duplicate prevention, and editing support.
@@ -167,6 +169,40 @@ public final class LocalTransactionRepository: TransactionRepositoryProtocol {
             throw RepositoryError.transactionNotFound(id)
         }
         inMemorySplits.remove(at: index)
+        saveSplitsToDisk()
+    }
+
+    // MARK: - Data Backup & Restore
+    public struct DELTABackupPayload: Codable {
+        public let version: String
+        public let timestamp: Date
+        public let transactions: [TransactionItem]
+        public let contacts: [ContactItem]
+        public let splits: [SplitRecord]
+    }
+
+    public func exportBackupData() async throws -> Data {
+        let payload = DELTABackupPayload(
+            version: "1.0.0",
+            timestamp: Date(),
+            transactions: inMemoryTransactions,
+            contacts: inMemoryContacts,
+            splits: inMemorySplits
+        )
+        return try jsonEncoder.encode(payload)
+    }
+
+    public func restoreBackupData(_ data: Data) async throws {
+        guard let payload = try? jsonDecoder.decode(DELTABackupPayload.self, from: data) else {
+            throw RepositoryError.storageFailure("Invalid or corrupted backup archive payload.")
+        }
+
+        self.inMemoryTransactions = payload.transactions
+        self.inMemoryContacts = payload.contacts
+        self.inMemorySplits = payload.splits
+
+        saveTransactionsToDisk()
+        saveContactsToDisk()
         saveSplitsToDisk()
     }
 
