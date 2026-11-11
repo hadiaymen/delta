@@ -1,7 +1,7 @@
 import SwiftUI
 import Combine
 
-/// View model driving global expense search and category filtering.
+/// View model driving global expense search and category filtering, including unclassified/other records.
 public final class SearchViewModel: ObservableObject {
     @Published public var searchText: String = ""
     @Published public var selectedCategory: ExpenseCategory? = nil
@@ -24,12 +24,13 @@ public final class SearchViewModel: ObservableObject {
             if searchText.isEmpty {
                 return matchesCategory
             } else {
-                return matchesCategory && (
-                    item.title.localizedCaseInsensitiveContains(searchText) ||
-                    item.trxID.localizedCaseInsensitiveContains(searchText)
-                )
+                let matchesTitle = item.title.localizedCaseInsensitiveContains(searchText)
+                let matchesTrxID = item.trxID.localizedCaseInsensitiveContains(searchText)
+                let matchesDesc = item.descriptionText?.localizedCaseInsensitiveContains(searchText) ?? false
+                let matchesNote = item.note?.localizedCaseInsensitiveContains(searchText) ?? false
+                let matchesAccount = item.accountName.localizedCaseInsensitiveContains(searchText)
+                return matchesCategory && (matchesTitle || matchesTrxID || matchesDesc || matchesNote || matchesAccount)
             }
         }
     }
 }
-

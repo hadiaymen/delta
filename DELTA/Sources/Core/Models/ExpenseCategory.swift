@@ -11,6 +11,7 @@ public enum ExpenseCategory: String, CaseIterable, Identifiable, Codable {
     case entertainment = "Entertainment"
     case shopping = "Shopping"
     case income = "Inflow & Deposit"
+    case other = "Other"
 
     public var id: String { rawValue }
 
@@ -32,6 +33,8 @@ public enum ExpenseCategory: String, CaseIterable, Identifiable, Codable {
             return "tag.fill"
         case .income:
             return "arrow.down.left"
+        case .other:
+            return "questionmark.circle"
         }
     }
 }

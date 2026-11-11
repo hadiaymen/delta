@@ -90,7 +90,7 @@ public struct RecentTransactionsSection: View {
                                     subtitle: item.trxID,
                                     amountString: item.formattedAmount,
                                     timeString: item.timeString,
-                                    direction: item.type == .debit ? .outflow : .inflow,
+                                    direction: item.cardDirection,
                                     action: {
                                         onSelectTransaction(item)
                                     }

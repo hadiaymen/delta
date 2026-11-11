@@ -7,15 +7,18 @@ public struct AccountOptionsSheet: View {
 
     public let card: DummyAccountCard
     public let onEditTapped: () -> Void
+    public let onLogOtherTapped: () -> Void
 
     public init(
         service: ExpenseTrackingService,
         card: DummyAccountCard,
-        onEditTapped: @escaping () -> Void
+        onEditTapped: @escaping () -> Void,
+        onLogOtherTapped: @escaping () -> Void = {}
     ) {
         self.service = service
         self.card = card
         self.onEditTapped = onEditTapped
+        self.onLogOtherTapped = onLogOtherTapped
     }
 
     public var body: some View {
@@ -46,7 +49,19 @@ public struct AccountOptionsSheet: View {
 
                 // Actions List
                 VStack(spacing: 10) {
-                    // 1. Edit Details
+                    // 1. Log Other Transaction
+                    Button(action: {
+                        dismiss()
+                        onLogOtherTapped()
+                    }) {
+                        optionRow(
+                            icon: "questionmark.circle",
+                            title: "Record Other (Unclassified)",
+                            subtitle: "Log financial record whose classification is unclear"
+                        )
+                    }
+
+                    // 2. Edit Details
                     Button(action: {
                         dismiss()
                         onEditTapped()
@@ -54,7 +69,7 @@ public struct AccountOptionsSheet: View {
                         optionRow(icon: "pencil", title: "Edit Account & Budget", subtitle: "Update name, category, or card color")
                     }
 
-                    // 2. Lock / Freeze Envelope Toggle
+                    // 3. Lock / Freeze Envelope Toggle
                     Button(action: {
                         var updated = card
                         updated.isLocked.toggle()

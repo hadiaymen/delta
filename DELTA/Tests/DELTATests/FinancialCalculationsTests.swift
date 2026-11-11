@@ -333,5 +333,203 @@ final class FinancialCalculationsTests: XCTestCase {
         XCTAssertEqual(accounts.count, 3)
         XCTAssertEqual(accounts.map(\.accountName), ["DELTA PERSONAL", "DELTA CASH", "DELTA SAVINGS"])
     }
+
+    // MARK: - 9. 'Other' Unclassified Workflow & Conversion Invariants
+    func testOtherTransactionCreationAndInPlaceConversion() async throws {
+        let repo = LocalTransactionRepository()
+        let service = ExpenseTrackingService(repository: repo)
+        await service.loadData()
+
+        let initialTxCount = service.transactions.count
+
+        // 1. Record an 'Other' transaction with optional merchant/title left blank
+        try await service.recordTransaction(
+            type: .other,
+            amount: Decimal(string: "78.50")!,
+            title: "", // Optional, defaults to "Unclassified Outlay"
+            timestamp: Date(),
+            category: .other,
+            accountID: "delta-personal",
+            accountName: "DELTA PERSONAL",
+            note: "Mystery charge on card"
+        )
+
+        XCTAssertEqual(service.transactions.count, initialTxCount + 1)
+        let otherTx = service.transactions.first!
+        XCTAssertEqual(otherTx.type, .other)
+        XCTAssertEqual(otherTx.amount, Decimal(string: "78.50")!)
+        XCTAssertEqual(otherTx.title, "Unclassified Outlay")
+        XCTAssertEqual(otherTx.category, .other)
+
+        // Other does not mutate monthly spent until classified
+        let spentBefore = service.monthlySpentDecimal
+
+        // 2. In-place conversion from Other into Debit
+        try await service.convertOtherTransaction(
+            id: otherTx.id,
+            toType: .debit,
+            category: .groceries
+        )
+
+        // Zero duplicate invariant: count remains exactly initialTxCount + 1
+        XCTAssertEqual(service.transactions.count, initialTxCount + 1)
+        let convertedDebit = service.transactions.first(where: { $0.id == otherTx.id })!
+        XCTAssertEqual(convertedDebit.type, .debit)
+        XCTAssertEqual(convertedDebit.category, .groceries)
+
+        // Now correctly reflects in monthly spent calculation
+        XCTAssertEqual(service.monthlySpentDecimal, spentBefore + Decimal(string: "78.50")!)
+
+        // 3. In-place conversion from Debit into Credit
+        try await service.convertOtherTransaction(
+            id: otherTx.id,
+            toType: .credit,
+            category: .income
+        )
+
+        XCTAssertEqual(service.transactions.count, initialTxCount + 1)
+        let convertedCredit = service.transactions.first(where: { $0.id == otherTx.id })!
+        XCTAssertEqual(convertedCredit.type, .credit)
+        XCTAssertEqual(convertedCredit.category, .income)
+    }
+
+    // MARK: - 10. History Deletion, Cascade & Safe Undo Invariants
+    func testDeleteTransactionRemovesFromLedgerAndRecalculatesBalances() async throws {
+        let repo = LocalTransactionRepository()
+        let service = ExpenseTrackingService(repository: repo)
+        await service.loadData()
+
+        // Record a debit transaction
+        let targetAccount = service.accounts.first!
+        let initialBalance = targetAccount.currentBalance
+        let debitAmount = Decimal(string: "150.00")!
+
+        try await service.recordTransaction(
+            type: .debit,
+            amount: debitAmount,
+            title: "Office Chair",
+            timestamp: Date(),
+            category: .shopping,
+            accountID: targetAccount.id,
+            accountName: targetAccount.accountName,
+            note: "Desk upgrade"
+        )
+
+        let tx = service.transactions.first(where: { $0.title == "Office Chair" })!
+        let spentWithTx = service.monthlySpentDecimal
+
+        // Deleting transaction
+        try await service.deleteTransaction(id: tx.id)
+
+        // 1. Removed from persistent repository and in-memory ledger
+        let fetchedTxs = try await repo.fetchTransactions()
+        XCTAssertFalse(fetchedTxs.contains(where: { $0.id == tx.id }))
+        XCTAssertFalse(service.transactions.contains(where: { $0.id == tx.id }))
+
+        // 2. Account balance restored (debit of 150 removed means balance is back to initial)
+        let updatedAccount = service.accounts.first(where: { $0.id == targetAccount.id })!
+        XCTAssertEqual(updatedAccount.currentBalance, initialBalance)
+
+        // 3. Monthly spent updated
+        XCTAssertEqual(service.monthlySpentDecimal, spentWithTx - debitAmount)
+    }
+
+    func testDeleteTransactionCascadesToLinkedSplitWithoutOrphanRecords() async throws {
+        let repo = LocalTransactionRepository()
+        let service = ExpenseTrackingService(repository: repo)
+        await service.loadData()
+
+        // Create a split expense
+        let targetAccount = service.accounts.first!
+        let totalExpense = Decimal(string: "90.00")!
+
+        let splitResult = try SplitCalculationEngine.calculateEqualSplit(
+            totalExpense: totalExpense,
+            participants: ["Sarah Jenkins", "Alex Rivera"],
+            includeCurrentUser: true,
+            currentUserName: "Hadi Aymen"
+        )
+
+        try await service.recordSplit(
+            title: "Team Lunch",
+            totalExpense: totalExpense,
+            payerName: "Hadi Aymen",
+            accountID: targetAccount.id,
+            accountName: targetAccount.accountName,
+            method: .equal,
+            shares: splitResult
+        )
+
+        let splitRecord = service.splits.first(where: { $0.title == "Team Lunch" })!
+        let linkedTxID = splitRecord.linkedTransactionID
+        XCTAssertNotNil(linkedTxID)
+
+        let linkedTx = service.transactions.first(where: { $0.id == linkedTxID })
+        XCTAssertNotNil(linkedTx)
+
+        // Deleting the transaction must cascade and remove the linked split without leaving orphan records
+        try await service.deleteTransaction(id: linkedTx!.id)
+
+        // Verify split is also removed from memory and storage
+        XCTAssertFalse(service.splits.contains(where: { $0.id == splitRecord.id }))
+        let fetchedSplits = try await repo.fetchSplits()
+        XCTAssertFalse(fetchedSplits.contains(where: { $0.id == splitRecord.id }))
+    }
+
+    func testUndoLastDeletionRestoresTransactionAndAccountBalances() async throws {
+        let repo = LocalTransactionRepository()
+        let service = ExpenseTrackingService(repository: repo)
+        await service.loadData()
+
+        let targetAccount = service.accounts.first!
+        let debitAmount = Decimal(string: "85.25")!
+
+        try await service.recordTransaction(
+            type: .debit,
+            amount: debitAmount,
+            title: "Groceries Market",
+            timestamp: Date(),
+            category: .groceries,
+            accountID: targetAccount.id,
+            accountName: targetAccount.accountName
+        )
+
+        let tx = service.transactions.first(where: { $0.title == "Groceries Market" })!
+        let balanceAfterDebit = service.accounts.first(where: { $0.id == targetAccount.id })!.currentBalance
+
+        // 1. Delete
+        try await service.deleteTransaction(id: tx.id)
+        XCTAssertFalse(service.transactions.contains(where: { $0.id == tx.id }))
+
+        // 2. Perform Undo within window
+        await service.undoLastDeletion()
+
+        // 3. Verified restored
+        XCTAssertTrue(service.transactions.contains(where: { $0.id == tx.id }))
+        let restoredAccount = service.accounts.first(where: { $0.id == targetAccount.id })!
+        XCTAssertEqual(restoredAccount.currentBalance, balanceAfterDebit)
+    }
+
+    func testHistoryDateGroupingChronologicalOrder() {
+        let service = ExpenseTrackingService()
+        let vm = HistoryViewModel(service: service)
+
+        let now = Date()
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: now)!
+        let twoDaysAgo = Calendar.current.date(byAdding: .day, value: -2, to: now)!
+
+        let txRecent = TransactionItem(title: "Recent", amount: 10, type: .debit, timestamp: now)
+        let txYesterday = TransactionItem(title: "Yesterday", amount: 20, type: .debit, timestamp: yesterday)
+        let txTwoDaysAgo = TransactionItem(title: "Two Days Ago", amount: 30, type: .debit, timestamp: twoDaysAgo)
+
+        service.transactions = [txYesterday, txTwoDaysAgo, txRecent]
+
+        let groups = vm.groupedTransactions
+        XCTAssertEqual(groups.count, 3)
+        XCTAssertEqual(groups[0].dateLabel, "Today")
+        XCTAssertEqual(groups[1].dateLabel, "Yesterday")
+        XCTAssertEqual(groups[0].items.first?.title, "Recent")
+    }
 }
+
 

@@ -221,3 +221,57 @@ The DELTA design system in Swift is organized under `DELTA/Sources/DesignSystem`
 - Automatic account balance calculation: `currentBalance = initialBalance + credits - debits`.
 - Duplicate prevention: Automatically blocks duplicate transactions occurring within 60 seconds with identical attributes.
 - Comprehensive unit tests implemented in `Tests/DELTATests/FinancialCalculationsTests.swift`.
+
+
+---
+
+## 9. Complete Split Feature Architecture
+
+### 9.1 Three Split Methods
+1. **Equal Split**:
+   - Minor currency remainder (cents) is distributed deterministically across participants.
+   - For example: \$100.00 split 3 ways yields \$33.34, \$33.33, and \$33.33, guaranteeing that $\sum \text{shares} = \text{total}$ down to the exact cent without rounding drift.
+2. **Custom Amount Split**:
+   - Each participant is assigned a specific `Decimal` amount.
+   - Strictly validated so $\sum \text{shares} = \text{total}$; otherwise, a validation error detailing the difference is surfaced.
+3. **Percentage Split**:
+   - Percentages are assigned to participants and strictly validated to equal 100%.
+   - Shares are computed from percentages with minor currency remainders distributed deterministically.
+
+### 9.2 Participants & Settlement Tracking
+- Participants can be selected from **Favourite People** or added ad-hoc.
+- The current user (**Hadi Aymen**) can be toggled as an included participant.
+- Each participant tracks individual shares, settlement status (`isSettled`), and timestamp.
+- Outstanding amounts owed to the payer are tracked separately from settled shares.
+
+### 9.3 Ledger Link & Dashboard Invariants
+- When the current user pays for the split, a **single linked original expense transaction** is created against the selected account card.
+- **Zero Duplicate Outlay Policy**: The original expense is recorded once and never duplicated in dashboard monthly calculations.
+- Marking an unsettled participant as settled records an incoming reimbursement credit, preserving accurate net outlay calculation.
+- **Dedicated History Filter**: A "Splits" filter chip in the History view allows auditing all active and settled split records.
+- Deleting a split removes the split record and cleans up the linked transaction consistently.
+
+
+---
+
+## 10. 'Other' (Unclassified) Transaction Workflow
+
+### 10.1 Purpose & Classification
+- The **Other** workflow is dedicated to financial records whose classification is currently unknown, pending, or unclear.
+- Fields:
+  - **Amount**: Required (`Decimal` precision).
+  - **Person / Merchant**: Optional (defaults to "Unclassified Outlay" if omitted).
+  - **Date & Time**: Defaulting to the device's current local date and time (fully editable).
+  - **Description**: Optional text field for situational context (e.g. "Receipt in jacket pocket").
+  - **Account**: Optional (defaults to selected active envelope or general).
+  - **Note**: Optional short note.
+- Saved into the `Other` category and assigned visual color `#E5C07B` (muted amber) with icon `questionmark.circle`.
+
+### 10.2 In-Place Conversion (Zero Duplication Invariant)
+- Records can be opened, edited, or converted later from History, Search, or Cards.
+- **Conversion Targets**:
+  1. **Convert to Debit**: Updates transaction type to `.debit`, assigns category, and updates monthly spent.
+  2. **Convert to Credit**: Updates transaction type to `.credit`, assigns category, and recalculates balances.
+  3. **Convert to Split**: Pre-populates a `SplitRecord` linked directly to the original record (`linkedTransactionID`).
+- **Zero Duplicate Policy**: Conversion strictly performs an in-place update on the existing record rather than generating a duplicate.
+- Persisted locally to disk and indexed in global search results across title, description, note, and account.

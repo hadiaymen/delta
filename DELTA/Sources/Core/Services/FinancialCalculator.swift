@@ -123,9 +123,13 @@ public struct FinancialCalculator {
     }
 
     /// Validates required fields and amount decimal precision.
-    public static func validate(amount: Decimal, title: String) -> Result<Void, TransactionValidationError> {
+    public static func validate(
+        amount: Decimal,
+        title: String,
+        allowEmptyTitle: Bool = false
+    ) -> Result<Void, TransactionValidationError> {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmedTitle.isEmpty {
+        if !allowEmptyTitle && trimmedTitle.isEmpty {
             return .failure(.emptyTitle)
         }
         if amount <= Decimal.zero {

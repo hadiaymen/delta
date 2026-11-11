@@ -1,10 +1,12 @@
 import SwiftUI
 
 /// Reusable Transaction Card component matching the reference feed item.
+/// Supports outflows (Debit / Red), inflows (Credit / Lime), and unclassified (Other / Amber).
 public struct TransactionCard: View {
     public enum Direction {
-        case outflow // Expense (red)
-        case inflow  // Income / Refund (lime)
+        case outflow // Expense / Debit (red)
+        case inflow  // Income / Credit (lime)
+        case other   // Unknown / Unclassified (amber)
     }
 
     private let title: String
@@ -43,12 +45,12 @@ public struct TransactionCard: View {
                                 .stroke(Color.deltaBorderOlive, lineWidth: 1)
                         )
 
-                    Image(systemName: direction == .outflow ? DeltaIcons.transactionOutflow : DeltaIcons.transactionInflow)
+                    Image(systemName: iconName)
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(accentColor)
                 }
 
-                // Title & Subtitle (TrxID)
+                // Title & Subtitle (TrxID / Category)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
                         .font(DeltaTypography.bodySemibold)
@@ -84,7 +86,25 @@ public struct TransactionCard: View {
     }
 
     private var accentColor: Color {
-        direction == .outflow ? Color.deltaExpenseRed : Color.deltaIncomeGreen
+        switch direction {
+        case .outflow:
+            return Color.deltaExpenseRed
+        case .inflow:
+            return Color.deltaIncomeGreen
+        case .other:
+            return Color(hex: "E5C07B") // Muted unclassified amber
+        }
+    }
+
+    private var iconName: String {
+        switch direction {
+        case .outflow:
+            return DeltaIcons.transactionOutflow
+        case .inflow:
+            return DeltaIcons.transactionInflow
+        case .other:
+            return "questionmark.circle"
+        }
     }
 }
 
@@ -96,4 +116,3 @@ private struct TransactionCardPressStyle: ButtonStyle {
             .animation(DeltaAnimations.tactilePress, value: configuration.isPressed)
     }
 }
-

@@ -154,6 +154,10 @@ public struct CardsView: View {
                     card: card,
                     onEditTapped: {
                         viewModel.onEditAccountTapped()
+                    },
+                    onLogOtherTapped: {
+                        viewModel.activeTransactionMode = .create(type: .other, initialRecipient: nil)
+                        viewModel.showTransactionFormSheet = true
                     }
                 )
             }

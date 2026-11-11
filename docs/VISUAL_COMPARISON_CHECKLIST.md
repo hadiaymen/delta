@@ -99,3 +99,58 @@
 | **FN-04** | Change Approval Gate | [x] | Zero design alterations; strictly follows reference authority. |
 | **FN-05** | Application Identity | [x] | App name permanently set to **DELTA**. |
 
+
+
+---
+
+## 8. Split Feature Verification & Invariants
+
+| Checkpoint | Reference Requirement | Status | Verification Criteria |
+| :--- | :--- | :---: | :--- |
+| **SPLIT-01**| Three Split Methods | [x] | Equal, Custom, and Percentage methods implemented in `SplitCalculationEngine.swift`. |
+| **SPLIT-02**| Deterministic Remainder | [x] | Equal splitting distributes remainder cents deterministically so sum of shares equals total exactly. |
+| **SPLIT-03**| Custom Split Validation | [x] | Enforces sum(shares) == total, surfacing exact diff if mismatched. |
+| **SPLIT-04**| Percentage Validation | [x] | Enforces sum(percentages) == 100%, distributing minor units. |
+| **SPLIT-05**| Participants Selection | [x] | Quick-add from Favourite People + custom new participant input. |
+| **SPLIT-06**| Current User Inclusion | [x] | Toggle to include Hadi Aymen (You) as an active participant. |
+| **SPLIT-07**| Single Linked Transaction | [x] | Creates single linked debit outlay without duplicating dashboard totals. |
+| **SPLIT-08**| Settlement Tracking | [x] | Owed vs Settled tracked per participant; tap to settle logs reimbursement credit. |
+| **SPLIT-09**| Dedicated History Filter | [x] | "Splits" filter chip in `HistoryView.swift` showing active split cards. |
+| **SPLIT-10**| Cascade Consistency | [x] | Editing and deleting cascade to linked transaction without orphan records. |
+| **SPLIT-11**| Calculation & DB Unit Tests | [x] | Comprehensive suite in `SplitCalculationTests.swift`. |
+
+
+---
+
+## 9. 'Other' Transaction Workflow Verification
+
+| Checkpoint | Reference Requirement | Status | Verification Criteria |
+| :--- | :--- | :---: | :--- |
+| **OTH-01** | Unclassified Category | [x] | Category `.other` with icon `questionmark.circle` and `#E5C07B` amber indicator. |
+| **OTH-02** | Optional Person/Merchant | [x] | Title is optional and defaults gracefully to "Unclassified Outlay". |
+| **OTH-03** | Date & Time Defaults | [x] | Defaults to current device local date and time; fully editable. |
+| **OTH-04** | Optional Description & Note | [x] | Input fields for situational description and purpose note in `TransactionFormSheet.swift`. |
+| **OTH-05** | Local Persistence | [x] | Saved persistently to `delta_transactions.json` via `LocalTransactionRepository`. |
+| **OTH-06** | History & Search Visibility | [x] | Appears in History under "All" and "Other" filters, and indexed in `SearchViewModel`. |
+| **OTH-07** | In-Place Conversion | [x] | Converts to Credit, Debit, or Split in-place without creating duplicate records. |
+| **OTH-08** | Automated Recalculation | [x] | Converts update account balances and TOTAL SPENT automatically. |
+| **OTH-09** | Unit Tests | [x] | Verified in `FinancialCalculationsTests.testOtherTransactionCreationAndInPlaceConversion`. |
+
+---
+
+## 10. History Screen & Deletion Safeguards Audit
+
+| Checkpoint | Reference Requirement | Status | Verification Criteria |
+| :--- | :--- | :---: | :--- |
+| **HIST-01** | Four Primary Filters + All | [x] | Debit, Credit, Split, Other, and All pills in `HistoryView.swift`. |
+| **HIST-02** | Date Grouping (Newest First)| [x] | Grouped by calendar day in descending chronological order with intra-day time descending. |
+| **HIST-03** | 7-Field Transaction Row | [x] | Displays Title, Person/Merchant, Category icon, Amount, Date, Time, and Type badge (`HistoryRowView.swift`). |
+| **HIST-04** | Complete Record Inspector | [x] | `TransactionDetailSheet.swift` displays full metadata, account envelope, note, description, and status. |
+| **HIST-05** | Accessible Delete Action | [x] | Prominently styled destructive action with clear confirmation dialog explaining permanent removal. |
+| **HIST-06** | Persistent Storage Removal | [x] | Permanently removes record from `delta_transactions.json` via repository. |
+| **HIST-07** | Automatic Financial Recalculation | [x] | Recalculates linked account balances, dashboard TOTAL SPENT, and analytics automatically. |
+| **HIST-08** | Search Synchronization | [x] | Instantly removed from search queries and filtered views upon deletion. |
+| **HIST-09** | Split Cascade Consistency | [x] | Deleting split-linked records removes corresponding split without leaving orphaned records. |
+| **HIST-10** | 5-Second Safe Undo | [x] | Floating toast with countdown allows immediate restoration of transaction, splits, and balances. |
+| **HIST-11** | Unit Tests | [x] | Verified in `FinancialCalculationsTests.swift` (tests for deletion, cascade, undo, and date ordering). |
+

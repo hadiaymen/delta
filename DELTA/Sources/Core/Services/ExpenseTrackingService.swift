@@ -200,13 +200,16 @@ public final class ExpenseTrackingService: ObservableObject {
         note: String?
     ) async throws {
         // 1. Validation
-        let validationResult = FinancialCalculator.validate(amount: amount, title: title)
+        let validationResult = FinancialCalculator.validate(amount: amount, title: title, allowEmptyTitle: type == .other)
         if case .failure(let error) = validationResult {
             throw error
         }
 
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedTitle = cleanTitle.isEmpty ? (type == .other ? "Unclassified Outlay" : "Transaction") : cleanTitle
+
         let newTransaction = TransactionItem(
-            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+            title: resolvedTitle,
             amount: amount,
             type: type,
             timestamp: timestamp,
@@ -229,7 +232,7 @@ public final class ExpenseTrackingService: ObservableObject {
     /// Update an existing transaction record.
     @MainActor
     public func updateTransaction(_ item: TransactionItem) async throws {
-        let validationResult = FinancialCalculator.validate(amount: item.amount, title: item.title)
+        let validationResult = FinancialCalculator.validate(amount: item.amount, title: item.title, allowEmptyTitle: item.type == .other)
         if case .failure(let error) = validationResult {
             throw error
         }
@@ -244,18 +247,140 @@ public final class ExpenseTrackingService: ObservableObject {
         }
     }
 
-    /// Delete a transaction record persistently.
+    // Cache for short safe Undo operation
+    @Published public var pendingDeletedTransaction: TransactionItem? = nil
+    private var pendingDeletedSplit: SplitRecord? = nil
+
+    /// Delete a transaction record persistently with split-cascade consistency and optional undo support.
     @MainActor
     public func deleteTransaction(id: String) async throws {
-        try await repository.deleteTransaction(id: id)
+        guard let itemIndex = transactions.firstIndex(where: { $0.id == id }) else {
+            throw RepositoryError.transactionNotFound(id)
+        }
+        let itemToDelete = transactions[itemIndex]
 
-        transactions.removeAll { $0.id == id }
+        // Find linked split if any to maintain relationship consistency
+        var linkedSplit: SplitRecord? = nil
+        if let splitID = itemToDelete.linkedSplitID {
+            linkedSplit = splits.first(where: { $0.id == splitID })
+        }
+
+        // Cache for Undo
+        self.pendingDeletedTransaction = itemToDelete
+        self.pendingDeletedSplit = linkedSplit
+
+        // 1. Delete from persistent storage
+        try await repository.deleteTransaction(id: id)
+        if let split = linkedSplit {
+            try? await repository.deleteSplit(id: split.id)
+            splits.removeAll { $0.id == split.id }
+        }
+
+        // 2. Remove from local transactions array (automatically updates Search)
+        transactions.remove(at: itemIndex)
+
+        // 3. Recalculate account balances, TOTAL SPENT, and analytics
         recalculateFinancials()
+
         if transactions.isEmpty {
             state = .empty
         } else {
             state = .loaded
         }
+    }
+
+    /// Restore the last deleted transaction and its linked split record.
+    @MainActor
+    public func undoLastDeletion() async {
+        guard let item = pendingDeletedTransaction else { return }
+
+        // Restore transaction to persistent repository
+        try? await repository.addTransaction(item)
+        transactions.insert(item, at: 0)
+        transactions.sort { $0.timestamp > $1.timestamp }
+
+        // Restore linked split if it existed
+        if let split = pendingDeletedSplit {
+            try? await repository.addSplit(split)
+            splits.insert(split, at: 0)
+            splits.sort { $0.timestamp > $1.timestamp }
+        }
+
+        // Recalculate financial balances and analytics
+        recalculateFinancials()
+        state = .loaded
+
+        // Clear undo cache
+        pendingDeletedTransaction = nil
+        pendingDeletedSplit = nil
+    }
+
+    /// Finalize deletion once the undo timer expires
+    public func finalizeDeletion() {
+        pendingDeletedTransaction = nil
+        pendingDeletedSplit = nil
+    }
+
+    // MARK: - 'Other' Transaction Conversion (Zero Duplicate Invariant)
+    @MainActor
+    public func convertOtherTransaction(
+        id: String,
+        toType: TransactionItem.TransactionType,
+        category: ExpenseCategory,
+        accountID: String? = nil,
+        accountName: String? = nil
+    ) async throws {
+        guard let index = transactions.firstIndex(where: { $0.id == id }) else {
+            throw RepositoryError.transactionNotFound(id)
+        }
+        var item = transactions[index]
+        item.type = toType
+        item.category = category
+        if let accID = accountID { item.accountID = accID }
+        if let accName = accountName { item.accountName = accName }
+
+        try await updateTransaction(item)
+    }
+
+    @MainActor
+    public func convertOtherToSplit(
+        transactionID: String,
+        title: String,
+        method: SplitMethod,
+        participants: [SplitParticipant]
+    ) async throws {
+        guard let index = transactions.firstIndex(where: { $0.id == transactionID }) else {
+            throw RepositoryError.transactionNotFound(transactionID)
+        }
+
+        var item = transactions[index]
+        let splitID = UUID().uuidString
+
+        item.type = .debit
+        item.title = "\(title) (Split)"
+        item.category = .dining
+        item.linkedSplitID = splitID
+        try await repository.updateTransaction(item)
+        transactions[index] = item
+
+        let newSplit = SplitRecord(
+            id: splitID,
+            title: title,
+            totalAmount: item.amount,
+            method: method,
+            payerName: "Hadi Aymen",
+            isCurrentUserPayer: true,
+            accountID: item.accountID,
+            accountName: item.accountName,
+            timestamp: item.timestamp,
+            participants: participants,
+            linkedTransactionID: item.id
+        )
+
+        try await repository.addSplit(newSplit)
+        splits.insert(newSplit, at: 0)
+        splits.sort { $0.timestamp > $1.timestamp }
+        recalculateFinancials()
     }
 
     // MARK: - Split Expense Operations

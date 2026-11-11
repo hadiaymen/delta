@@ -6,10 +6,11 @@ public struct TransactionItem: Identifiable, Hashable, Codable {
     public enum TransactionType: String, Codable, CaseIterable {
         case credit // Money received (Inflow / Green)
         case debit  // Money spent (Outflow / Red)
+        case other  // Unknown or unclear classification (Unclassified / Amber)
     }
 
     public let id: String
-    public var title: String          // Person, merchant, or source name
+    public var title: String          // Person, merchant, or source name (optional for Other)
     public var trxID: String
     public var amount: Decimal        // Accurate decimal currency representation
     public var type: TransactionType
@@ -18,6 +19,7 @@ public struct TransactionItem: Identifiable, Hashable, Codable {
     public var accountID: String      // Associated personal account / envelope ID
     public var accountName: String    // Associated account name
     public var note: String?          // Purpose or short note
+    public var descriptionText: String? // Optional detailed description
     public var linkedSplitID: String? // Linked SplitRecord ID if this was part of a split
 
     public init(
@@ -31,10 +33,12 @@ public struct TransactionItem: Identifiable, Hashable, Codable {
         accountID: String = "default-checking",
         accountName: String = "Daily Living Envelope",
         note: String? = nil,
+        descriptionText: String? = nil,
         linkedSplitID: String? = nil
     ) {
         self.id = id
-        self.title = title
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.title = trimmedTitle.isEmpty ? (type == .other ? "Unclassified Outlay" : "Transaction") : trimmedTitle
         self.trxID = trxID
         self.amount = amount < 0 ? -amount : amount
         self.type = type
@@ -43,6 +47,7 @@ public struct TransactionItem: Identifiable, Hashable, Codable {
         self.accountID = accountID
         self.accountName = accountName
         self.note = note
+        self.descriptionText = descriptionText
         self.linkedSplitID = linkedSplitID
     }
 
@@ -54,8 +59,14 @@ public struct TransactionItem: Identifiable, Hashable, Codable {
         formatter.maximumFractionDigits = 2
         formatter.minimumFractionDigits = 2
         let formatted = formatter.string(from: amount as NSDecimalNumber) ?? "$\(amount)"
-        let sign = type == .debit ? "-" : "+"
-        return "\(sign)\(formatted)"
+        switch type {
+        case .debit:
+            return "-\(formatted)"
+        case .credit:
+            return "+\(formatted)"
+        case .other:
+            return "~\(formatted)"
+        }
     }
 
     /// Amount formatted without sign for input fields
@@ -68,12 +79,38 @@ public struct TransactionItem: Identifiable, Hashable, Codable {
 
     /// Display color according to DELTA design system tokens
     public var amountColor: Color {
-        type == .debit ? Color.deltaExpenseRed : Color.deltaIncomeGreen
+        switch type {
+        case .debit:
+            return Color.deltaExpenseRed
+        case .credit:
+            return Color.deltaIncomeGreen
+        case .other:
+            return Color(hex: "E5C07B") // Muted unclassified amber
+        }
+    }
+
+    /// Transaction card direction mapping
+    public var cardDirection: TransactionCard.Direction {
+        switch type {
+        case .debit:
+            return .outflow
+        case .credit:
+            return .inflow
+        case .other:
+            return .other
+        }
     }
 
     /// SF Symbol for transaction status
     public var iconName: String {
-        type == .debit ? DeltaIcons.transactionOutflow : DeltaIcons.transactionInflow
+        switch type {
+        case .debit:
+            return DeltaIcons.transactionOutflow
+        case .credit:
+            return DeltaIcons.transactionInflow
+        case .other:
+            return "questionmark.circle"
+        }
     }
 
     /// Relative or formatted time string (e.g., "05:29 PM")
